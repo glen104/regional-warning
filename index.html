@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>NWS Warning Feed — JAN / BMX</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0a0c0f; --panel:#0f1318; --border:#1e2530; --border-hi:#2a3545;
+  --text:#c8d4e0; --text-dim:#5a6a7a; --text-hi:#e8f0f8;
+  --mono:'Share Tech Mono',monospace; --sans:'Barlow Condensed',sans-serif;
+  --jan:#1a6fb5; --jan-hi:#2490e8; --jan-glow:rgba(26,111,181,.15);
+  --bmx:#b56b1a; --bmx-hi:#e88c24; --bmx-glow:rgba(181,107,26,.15);
+  --tor:#cc2200; --tor-hi:#ff3311; --tor-glow:rgba(204,34,0,.2);
+  --svr:#cc8800; --svr-hi:#ffaa00; --svr-glow:rgba(204,136,0,.15);
+  --ff:#006699;  --ff-hi:#0099cc;  --ff-glow:rgba(0,102,153,.15);
+  --iem:#2a6e2a; --iem-hi:#4aaa4a;
+  --api:#555;    --api-hi:#999;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;overflow-x:hidden;-webkit-text-size-adjust:100%}
+
+/* ── HEADER ─────────────────────────────────────────────────────────────── */
+#header{
+  background:linear-gradient(135deg,#0d1520,#0a0c0f);
+  border-bottom:1px solid var(--border-hi);
+  padding:10px 16px;
+  padding-top:max(10px, env(safe-area-inset-top));
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:200;
+}
+#header h1{font-weight:900;font-size:.9rem;letter-spacing:2px;text-transform:uppercase;color:var(--text-hi)}
+#header h1 .jan{color:var(--jan-hi)} #header h1 .bmx{color:var(--bmx-hi)} #header h1 .div{color:var(--text-dim);margin:0 6px}
+#status-bar{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:.65rem;color:var(--text-dim)}
+.dot{width:6px;height:6px;border-radius:50%;background:#2a6;animation:blink 2s infinite;flex-shrink:0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+#refresh-btn{background:var(--border-hi);border:1px solid var(--border);color:var(--text-dim);padding:5px 10px;border-radius:3px;font-family:var(--mono);font-size:.65rem;cursor:pointer;letter-spacing:1px;transition:all .15s;white-space:nowrap}
+#refresh-btn:active{background:var(--border);color:var(--text)}
+
+/* ── OFFICE TABS ─────────────────────────────────────────────────────────── */
+#office-tabs{
+  display:flex;
+  border-bottom:2px solid var(--border-hi);
+  background:var(--panel);
+  position:sticky;top:41px;z-index:190;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
+}
+#office-tabs::-webkit-scrollbar{display:none}
+.office-tab{
+  flex:1;min-width:80px;
+  padding:10px 12px;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  cursor:pointer;border-bottom:3px solid transparent;
+  transition:all .15s;user-select:none;
+  font-family:var(--sans);
+}
+.office-tab .tab-id{font-weight:900;font-size:1.1rem;letter-spacing:3px}
+.office-tab .tab-count{font-family:var(--mono);font-size:.6rem;color:var(--text-dim)}
+.office-tab.jan .tab-id{color:var(--text-dim)}
+.office-tab.bmx .tab-id{color:var(--text-dim)}
+.office-tab.jan.active{border-bottom-color:var(--jan);background:var(--jan-glow)}
+.office-tab.jan.active .tab-id{color:var(--jan-hi)}
+.office-tab.bmx.active{border-bottom-color:var(--bmx);background:var(--bmx-glow)}
+.office-tab.bmx.active .tab-id{color:var(--bmx-hi)}
+
+/* ── SOURCE TOGGLE (mobile per-warning) ──────────────────────────────────── */
+.src-toggle{
+  display:flex;
+  border-bottom:1px solid var(--border);
+  background:rgba(255,255,255,.02);
+  flex-shrink:0;
+}
+.src-btn{
+  flex:1;padding:7px 10px;
+  font-family:var(--mono);font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;
+  cursor:pointer;border:none;background:transparent;
+  transition:all .15s;color:var(--text-dim);
+  border-bottom:2px solid transparent;
+}
+.src-btn.iem.active{color:var(--iem-hi);border-bottom-color:var(--iem);background:rgba(42,110,42,.08)}
+.src-btn.api.active{color:var(--api-hi);border-bottom-color:var(--api-hi);background:rgba(85,85,85,.08)}
+
+/* ── OFFICE PANELS ───────────────────────────────────────────────────────── */
+.office-panel{display:none;flex-direction:column;min-height:0}
+.office-panel.active{display:flex}
+
+/* ── DESKTOP LAYOUT ──────────────────────────────────────────────────────── */
+@media(min-width:768px){
+  #office-tabs{display:none}
+  #offices{display:grid;grid-template-columns:1fr 1fr;gap:0;height:calc(100vh - 41px)}
+  .office-panel{display:flex!important;flex-direction:column;overflow:hidden;border-right:1px solid var(--border-hi)}
+  .office-panel:last-child{border-right:none}
+  .office-head{display:flex}
+  .src-toggle{display:none!important}
+  .source-grid{display:grid!important;grid-template-columns:1fr 1fr}
+  .source-col{display:block!important}
+  .warn-list{flex:1;overflow-y:auto}
+}
+
+/* ── MOBILE LAYOUT ───────────────────────────────────────────────────────── */
+@media(max-width:767px){
+  #offices{display:block;height:calc(100vh - 92px);overflow:hidden}
+  .office-panel{height:100%;overflow:hidden}
+  .office-head{display:none}
+  .warn-list{height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:8px}
+  .source-grid{display:block}
+  .source-col{display:none}
+  .source-col.active{display:block}
+  .comparison-block{margin-bottom:8px}
+}
+
+/* ── OFFICE HEAD (desktop only) ──────────────────────────────────────────── */
+.office-head{padding:10px 16px;border-bottom:2px solid;align-items:baseline;gap:10px;flex-shrink:0}
+.office-panel.jan .office-head{background:var(--jan-glow);border-color:var(--jan)}
+.office-panel.bmx .office-head{background:var(--bmx-glow);border-color:var(--bmx)}
+.office-id-lbl{font-weight:900;font-size:1.2rem;letter-spacing:4px}
+.jan .office-id-lbl{color:var(--jan-hi)} .bmx .office-id-lbl{color:var(--bmx-hi)}
+.office-name-lbl{font-weight:300;font-size:.8rem;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;flex:1}
+.office-counts{font-family:var(--mono);font-size:.62rem;color:var(--text-dim);line-height:1.7}
+.office-counts .iem-c{color:var(--iem-hi)} .office-counts .api-c{color:var(--api-hi)}
+
+/* ── WARNING LIST ────────────────────────────────────────────────────────── */
+.warn-list{padding:10px;display:flex;flex-direction:column;gap:10px}
+.warn-list::-webkit-scrollbar{width:3px}
+.warn-list::-webkit-scrollbar-thumb{background:var(--border-hi);border-radius:2px}
+
+/* ── COMPARISON BLOCK ────────────────────────────────────────────────────── */
+.comparison-block{border:1px solid var(--border);border-radius:3px;overflow:hidden;background:var(--panel)}
+.comp-header{padding:7px 10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)}
+.phen-badge{font-weight:900;font-size:.68rem;letter-spacing:2px;padding:2px 7px;border-radius:2px}
+.phen-badge.TO{background:var(--tor);color:#fff}
+.phen-badge.SV{background:var(--svr);color:#fff}
+.phen-badge.FF{background:var(--ff);color:#fff}
+.threat-badge{font-family:var(--mono);font-size:.6rem;letter-spacing:1px;padding:1px 5px;border-radius:2px;border:1px solid}
+.threat-badge.CATASTROPHIC{color:#ff2200;border-color:#ff2200;background:rgba(255,34,0,.1)}
+.threat-badge.CONSIDERABLE{color:#ff8800;border-color:#ff8800;background:rgba(255,136,0,.1)}
+.threat-badge.OBSERVED{color:#ff4444;border-color:#ff4444;background:rgba(255,68,68,.1)}
+.threat-badge.STANDARD{color:#666;border-color:#444}
+.tor-possible{font-family:var(--mono);font-size:.58rem;color:var(--tor-hi);border:1px solid var(--tor);padding:1px 4px;border-radius:2px;background:var(--tor-glow);letter-spacing:1px}
+.etn-lbl{font-family:var(--mono);font-size:.62rem;color:var(--text-dim);margin-left:auto}
+.action-badge{font-family:var(--mono);font-size:.58rem;padding:1px 4px;border-radius:2px;letter-spacing:1px}
+.action-badge.NEW,.action-badge.CON{background:#1a3a1a;color:#4a9;border:1px solid #2a5a2a}
+.action-badge.CAN,.action-badge.EXP{background:#2a1a1a;color:#a44;border:1px solid #4a2a2a}
+.only-badge{font-family:var(--mono);font-size:.55rem;padding:1px 4px;border-radius:2px;letter-spacing:1px}
+.only-badge.iem-only{background:rgba(42,110,42,.3);color:var(--iem-hi);border:1px solid var(--iem)}
+.only-badge.api-only{background:rgba(85,85,85,.3);color:var(--api-hi);border:1px solid #666}
+
+/* ── SOURCE COLUMNS ──────────────────────────────────────────────────────── */
+.source-grid{border-top:0}
+.source-col{padding:8px 10px;border-right:1px solid var(--border)}
+.source-col:last-child{border-right:none}
+.source-label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;padding-bottom:4px;border-bottom:1px solid var(--border)}
+.source-label{font-family:var(--mono);font-size:.58rem;letter-spacing:2px;text-transform:uppercase}
+.source-col.iem .source-label{color:var(--iem-hi)}
+.source-col.api .source-label{color:var(--api-hi)}
+.source-missing{font-family:var(--mono);font-size:.65rem;color:var(--text-dim);font-style:italic;padding:4px 0}
+
+/* ── DATA ROWS ───────────────────────────────────────────────────────────── */
+.data-row{display:flex;flex-direction:column;gap:1px;margin-bottom:5px}
+.data-lbl{font-family:var(--mono);font-size:.56rem;color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase}
+.data-val{font-family:var(--mono);font-size:.72rem;color:var(--text);line-height:1.3}
+.data-val.hi{color:var(--text-hi);font-weight:700}
+.data-val.warn{color:var(--svr-hi)}
+.data-val.danger{color:var(--tor-hi)}
+.data-val.dim{color:var(--text-dim)}
+.data-val.ff-val{color:var(--ff-hi)}
+.diff-flag{font-family:var(--mono);font-size:.55rem;padding:1px 4px;background:rgba(200,150,0,.2);color:#cc0;border:1px solid #660;border-radius:2px;letter-spacing:1px}
+.motion-row{display:flex;align-items:center;gap:5px;padding:4px 7px;background:rgba(255,255,255,.02);border-radius:2px;border:1px solid var(--border);margin-top:3px}
+.motion-text{font-family:var(--mono);font-size:.7rem;color:var(--text)}
+.zone-row{display:flex;flex-wrap:wrap;gap:2px;margin-top:3px}
+.zone-tag{font-family:var(--mono);font-size:.56rem;padding:1px 4px;border-radius:2px;background:var(--border);color:var(--text-dim);border:1px solid var(--border-hi)}
+.expires-row{display:flex;justify-content:space-between;align-items:center;padding-top:5px;border-top:1px solid var(--border);margin-top:4px}
+.exp-lbl{font-family:var(--mono);font-size:.56rem;color:var(--text-dim);letter-spacing:1px}
+.exp-val{font-family:var(--mono);font-size:.66rem;color:var(--text-dim)}
+.exp-val.soon{color:var(--tor-hi)}
+
+/* ── EMPTY STATE ─────────────────────────────────────────────────────────── */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-dim);font-family:var(--mono);font-size:.75rem;letter-spacing:2px;text-transform:uppercase;padding:60px 20px;text-align:center;min-height:200px}
+.empty-state .icon{font-size:1.8rem;opacity:.3}
+.loading-pulse{animation:loadpulse 1s infinite}
+@keyframes loadpulse{0%,100%{opacity:.4}50%{opacity:1}}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>
+    <span class="jan">JAN</span><span class="div">/</span><span class="bmx">BMX</span>
+    &nbsp;·&nbsp; TOR · SVR · FF
+  </h1>
+  <div id="status-bar">
+    <div class="dot" id="dot"></div>
+    <span id="last-updated">—</span>
+    <button id="refresh-btn" onclick="fetchData()">↺</button>
+  </div>
+</div>
+
+<!-- Mobile office tabs -->
+<div id="office-tabs">
+  <div class="office-tab jan active" onclick="switchOffice('JAN')">
+    <span class="tab-id">JAN</span>
+    <span class="tab-count" id="tab-count-JAN">IEM — · API —</span>
+  </div>
+  <div class="office-tab bmx" onclick="switchOffice('BMX')">
+    <span class="tab-id">BMX</span>
+    <span class="tab-count" id="tab-count-BMX">IEM — · API —</span>
+  </div>
+</div>
+
+<div id="offices">
+  <!-- JAN panel -->
+  <div class="office-panel jan active" id="panel-JAN">
+    <div class="office-head">
+      <span class="office-id-lbl">JAN</span>
+      <span class="office-name-lbl">Jackson, MS</span>
+      <div class="office-counts">
+        <div>IEM: <span class="iem-c" id="iem-JAN">—</span></div>
+        <div>API: <span class="api-c" id="api-JAN">—</span></div>
+      </div>
+    </div>
+    <div class="warn-list" id="list-JAN">
+      <div class="empty-state"><span class="icon loading-pulse">⟳</span><span>Loading...</span></div>
+    </div>
+  </div>
+
+  <!-- BMX panel -->
+  <div class="office-panel bmx" id="panel-BMX">
+    <div class="office-head">
+      <span class="office-id-lbl">BMX</span>
+      <span class="office-name-lbl">Birmingham, AL</span>
+      <div class="office-counts">
+        <div>IEM: <span class="iem-c" id="iem-BMX">—</span></div>
+        <div>API: <span class="api-c" id="api-BMX">—</span></div>
+      </div>
+    </div>
+    <div class="warn-list" id="list-BMX">
+      <div class="empty-state"><span class="icon loading-pulse">⟳</span><span>Loading...</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+
+
+var JSON_URL = "https://glen104.github.io/nwc-status/office_warnings_test.json";
+var REFRESH  = 30000;
+var activeOffice = "JAN";
+
+// ── OFFICE TAB SWITCHING ──────────────────────────────────────────────────
+function switchOffice(id) {
+  activeOffice = id;
+  document.querySelectorAll('.office-tab').forEach(function(t){
+    t.classList.toggle('active', t.classList.contains(id.toLowerCase()));
+  });
+  document.querySelectorAll('.office-panel').forEach(function(p){
+    p.classList.toggle('active', p.id === 'panel-' + id);
+  });
+}
+
+// ── SOURCE TOGGLE (mobile per-warning) ───────────────────────────────────
+function switchSrc(blockId, src) {
+  var block = document.getElementById(blockId);
+  if (!block) return;
+  block.querySelectorAll('.source-col').forEach(function(c){
+    c.classList.toggle('active', c.classList.contains(src));
+  });
+  block.querySelectorAll('.src-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.src === src);
+  });
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────
+function fmtTime(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('en-US',{
+      timeZone:'America/Chicago',month:'numeric',day:'numeric',
+      hour:'numeric',minute:'2-digit',hour12:true
+    }) + ' CT';
+  } catch(e){ return iso; }
+}
+
+function expiringSoon(iso) {
+  try { return iso && (new Date(iso).getTime() - Date.now()) < 15*60*1000; }
+  catch(e){ return false; }
+}
+
+function dirArrow(dir) {
+  var map={
+    'N':0,'NNE':22,'NE':45,'ENE':67,'E':90,'ESE':112,'SE':135,'SSE':157,
+    'S':180,'SSW':202,'SW':225,'WSW':247,'W':270,'WNW':292,'NW':315,'NNW':337,
+    'NORTH':0,'NORTHEAST':45,'EAST':90,'SOUTHEAST':135,
+    'SOUTH':180,'SOUTHWEST':225,'WEST':270,'NORTHWEST':315,'STATIONARY':null
+  };
+  var d = dir ? dir.toUpperCase().trim() : '';
+  var deg = map[d];
+  if (deg === null || deg === undefined) return '⊙';
+  return '<span style="display:inline-block;transform:rotate('+deg+'deg)">↑</span>';
+}
+
+function esc(s){ return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }
+
+function diffVal(a, b) {
+  if (a === undefined || b === undefined || a === null || b === null) return '';
+  if (String(a) !== String(b)) return ' <span class="diff-flag">DIFF</span>';
+  return '';
+}
+
+// ── RENDER SOURCE COLUMN ──────────────────────────────────────────────────
+function renderSourceCol(w, label, cls, otherW, isDefault) {
+  var html = '<div class="source-col ' + cls + (isDefault ? ' active' : '') + '">';
+  html += '<div class="source-label-row">';
+  html += '<span class="source-label">' + label + '</span>';
+  html += '</div>';
+
+  if (!w) {
+    html += '<div class="source-missing">Not in this source</div>';
+    html += '</div>';
+    return html;
+  }
+
+  var phen = (w.phenomena || '').toUpperCase();
+
+  if (w.areaDesc) {
+    html += '<div class="data-row"><div class="data-lbl">AREA</div><div class="data-val hi">' + esc(w.areaDesc) + '</div></div>';
+  }
+  if (w.hailSize) {
+    html += '<div class="data-row"><div class="data-lbl">HAIL</div><div class="data-val warn">' + esc(w.hailSize) + (otherW ? diffVal(w.hailSize, otherW.hailSize) : '') + '</div></div>';
+  }
+  if (w.windSpeed) {
+    html += '<div class="data-row"><div class="data-lbl">WIND</div><div class="data-val warn">' + esc(w.windSpeed) + (otherW ? diffVal(w.windSpeed, otherW.windSpeed) : '') + '</div></div>';
+  }
+  if (w.detectionSource) {
+    html += '<div class="data-row"><div class="data-lbl">SOURCE</div><div class="data-val ' + (w.detectionSource==='OBSERVED'?'danger':'') + '">' + esc(w.detectionSource) + '</div></div>';
+  }
+  if (w.nearestLocation) {
+    html += '<div class="data-row"><div class="data-lbl">LOCATION</div><div class="data-val hi">' + esc(w.nearestLocation) + '</div></div>';
+  }
+  if (phen === 'FF' && w.threatLevel) {
+    html += '<div class="data-row"><div class="data-lbl">FF THREAT</div><div class="data-val ff-val">' + esc(w.threatLevel) + '</div></div>';
+  }
+  if (w.issued) {
+    html += '<div class="data-row"><div class="data-lbl">ISSUED</div><div class="data-val dim">' + fmtTime(w.issued) + (otherW ? diffVal(w.issued, otherW.issued) : '') + '</div></div>';
+  }
+  if (w.stormMotion) {
+    var m = w.stormMotion;
+    html += '<div class="motion-row">';
+    html += '<span>' + dirArrow(m.direction) + '</span>';
+    html += '<span class="motion-text">';
+    if (m.direction === 'STATIONARY') { html += 'Stationary'; }
+    else {
+      html += esc(m.direction) + ' at ' + esc(m.speed_mph) + ' MPH';
+      if (m.bearing !== null && m.bearing !== undefined) {
+        html += ' <span style="color:var(--text-dim)">(' + m.bearing + '°)</span>';
+      }
+    }
+    html += '</span></div>';
+  }
+  if (w.nwsHeadline) {
+    html += '<div class="data-row" style="margin-top:4px"><div class="data-val dim" style="font-size:.62rem;line-height:1.4">' + esc(w.nwsHeadline) + '</div></div>';
+  }
+  if (w.ugcZones && w.ugcZones.length) {
+    html += '<div class="zone-row">';
+    w.ugcZones.forEach(function(z){ html += '<span class="zone-tag">' + esc(z) + '</span>'; });
+    html += '</div>';
+  }
+  if (w.polygon && w.polygon.length) {
+    html += '<div class="data-row" style="margin-top:3px"><div class="data-lbl">POLYGON</div><div class="data-val dim">' + w.polygon.length + ' pts</div></div>';
+  }
+  if (w.expires) {
+    var soon = expiringSoon(w.expires);
+    html += '<div class="expires-row"><span class="exp-lbl">EXPIRES</span><span class="exp-val' + (soon?' soon':'') + '">' + fmtTime(w.expires) + (soon?' ⚠':'') + '</span></div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+// ── RENDER COMPARISON BLOCK ───────────────────────────────────────────────
+var blockCounter = 0;
+function renderComparison(entry) {
+  var w = entry.iem || entry.api;
+  if (!w) return '';
+
+  var phen   = (w.phenomena || '').toUpperCase();
+  var vtec   = w.vtec || {};
+  var action = vtec.action || '';
+  var threat = ((w.threatLevel) || 'STANDARD').toUpperCase();
+  var blockId = 'cb-' + (++blockCounter);
+
+  var html = '<div class="comparison-block" id="' + blockId + '">';
+
+  // Header
+  html += '<div class="comp-header">';
+  html += '<span class="phen-badge ' + phen + '">' + (phen==='TO'?'TORNADO':phen==='SV'?'SEVERE':'FLASH FLOOD') + '</span>';
+  if (threat !== 'STANDARD') html += '<span class="threat-badge ' + threat + '">' + threat + '</span>';
+  if (phen !== 'TO' && w.tornadoPossible) html += '<span class="tor-possible">TOR POSS</span>';
+  if (action) html += '<span class="action-badge ' + action + '">' + action + '</span>';
+  if (entry.iemOnly) html += '<span class="only-badge iem-only">IEM ONLY</span>';
+  if (entry.apiOnly) html += '<span class="only-badge api-only">API ONLY</span>';
+  html += '<span class="etn-lbl">#' + esc(vtec.etn) + '</span>';
+  html += '</div>';
+
+  // Mobile source toggle
+  html += '<div class="src-toggle">';
+  html += '<button class="src-btn iem active" data-src="iem" onclick="switchSrc(\'' + blockId + '\',\'iem\')">IEM</button>';
+  html += '<button class="src-btn api" data-src="api" onclick="switchSrc(\'' + blockId + '\',\'api\')">api.weather.gov</button>';
+  html += '</div>';
+
+  // Source grid (desktop side-by-side / mobile tabbed)
+  html += '<div class="source-grid">';
+  html += renderSourceCol(entry.iem, 'IEM', 'iem', entry.api, true);
+  html += renderSourceCol(entry.api, 'api.weather.gov', 'api', entry.iem, false);
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+// ── RENDER OFFICE ─────────────────────────────────────────────────────────
+function renderOffice(officeId, officeData) {
+  var iemEl  = document.getElementById('iem-' + officeId);
+  var apiEl  = document.getElementById('api-' + officeId);
+  var listEl = document.getElementById('list-' + officeId);
+  var tabEl  = document.getElementById('tab-count-' + officeId);
+  if (!listEl) return;
+
+  var iemCnt = (officeData && officeData.iemCount !== undefined) ? officeData.iemCount : '—';
+  var apiCnt = (officeData && officeData.apiCount !== undefined) ? officeData.apiCount : '—';
+  if (iemEl) iemEl.textContent = iemCnt;
+  if (apiEl) apiEl.textContent = apiCnt;
+  if (tabEl) tabEl.textContent = 'IEM ' + iemCnt + ' · API ' + apiCnt;
+
+  blockCounter = 0;
+  var comparison = (officeData && officeData.comparison) || [];
+  if (!comparison.length) {
+    listEl.innerHTML = '<div class="empty-state"><span class="icon">✓</span><span>No active warnings</span></div>';
+    return;
+  }
+  listEl.innerHTML = comparison.map(renderComparison).join('');
+}
+
+// ── FETCH ─────────────────────────────────────────────────────────────────
+function fetchData() {
+  var dot = document.getElementById('dot');
+  dot.style.background = '#a84';
+  fetch(JSON_URL + '?cb=' + Date.now())
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      dot.style.background = '#2a6';
+      var offices = data.offices || {};
+      Object.keys(offices).forEach(function(id){ renderOffice(id, offices[id]); });
+      document.getElementById('last-updated').textContent = fmtTime(data.updated);
+    })
+    .catch(function(e){
+      dot.style.background = '#a33';
+      document.getElementById('last-updated').textContent = 'Error';
+      console.error(e);
+    });
+}
+
+fetchData();
+setInterval(fetchData, REFRESH);
+</script>
+</body>
+</html>
